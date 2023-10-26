@@ -46,7 +46,6 @@ def start(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_worker(call):
-    print(call)
     user_id = call.from_user.id
     try:
         logger(user_id, buttons[call.json["data"]])
@@ -69,6 +68,11 @@ def callback_worker(call):
         text = "Введите номер терминала для добавления."
         bot.send_message(user_id, text=text)
         bot.register_next_step_handler(call.message, append_terminal)
+    # Кнопка "Удалить терминал из доверенных"
+    elif call.data == "3":
+        text = "Введите номер терминала для удаления."
+        bot.send_message(user_id, text=text)
+        bot.register_next_step_handler(call.message, delete_terminal)
     # Кнопка "Проверить наличие терминала в доверенных"
     elif call.data == "4":
         text = "Введите номер терминала для проверки."
@@ -79,6 +83,21 @@ def callback_worker(call):
         filename = postgreSQL.get_trusted_terminals()
         with open(filename, 'rb') as file:
             bot.send_document(call.message.chat.id, file)
+        os.remove(filename)
+    # Кнопка "Проверить токен Виалона"
+    elif call.data == "6":
+        token, result = postgreSQL.check_token()
+        text, keyboard = get_keyboard(user_id, 'end')
+        if result:
+            text = 'Токен корректен.'
+        else:
+            text = 'Токен не работает.'
+        bot.send_message(user_id, text=text, reply_markup=keyboard)
+    # Кнопка "Обновить токен Виалона"
+    elif call.data == "7":
+        text = "Введите токен."
+        bot.send_message(user_id, text=text)
+        bot.register_next_step_handler(call.message, update_token)
     # Кнопка "Работа с БД"
     elif call.data == "8":
         text, keyboard = get_keyboard(user_id, 'Работа с БД')
@@ -175,10 +194,6 @@ def buttons_collection(role, menu):
     return [{'id': i, 'text': buttons[i]} for i in buttons if i in buttons_list]
 
 
-def check_terminal_in_bd(terminal):
-    return True
-
-
 def append_terminal(message):
     user_id = message.from_user.id
     logger(user_id, message.text)
@@ -186,10 +201,34 @@ def append_terminal(message):
     try:
         terminal = int(message.text)
         if len(str(terminal)) == 9:
-            if not check_terminal_in_bd(terminal):
-                result = f'Терминал {terminal} добавлен'
+            res, reason = postgreSQL.append_terminal(terminal)
+            if res:
+                result = reason
             else:
-                result = f'Терминал уже был добавлен ранее.'
+                result += ' ' + reason
+        else:
+            result += ' Неправильная длина номера.'
+    except ValueError:
+        result += ' Номер терминала может содержать только цифры.'
+    _, keyboard = get_keyboard(user_id, 'end')
+    text = f'{result}\n' \
+           f'Продолжай вводить номера терминалов или нажми "Назад"'
+    bot.send_message(user_id, text=text, reply_markup=keyboard)
+    bot.register_next_step_handler(message, append_terminal)
+
+
+def delete_terminal(message):
+    user_id = message.from_user.id
+    logger(user_id, message.text)
+    result = f'Ошбика добавления!'
+    try:
+        terminal = int(message.text)
+        if len(str(terminal)) == 9:
+            res, reason = postgreSQL.delete_terminal(terminal)
+            if res:
+                result = reason
+            else:
+                result += ' ' + reason
         else:
             result += ' Неправильная длина номера.'
     except ValueError:
@@ -208,7 +247,7 @@ def check_terminal(message):
     try:
         terminal = int(message.text)
         if len(str(terminal)) == 9:
-            if not check_terminal_in_bd(terminal):
+            if not postgreSQL.check_terminal(terminal):
                 result = f'{terminal} - нет в БД.'
             else:
                 result = f'{terminal} - есть в БД.'
@@ -287,6 +326,19 @@ def get_user_name(message):
     text = "Выберите роль."
     _, keyboard = get_keyboard(user_id, 'roles')
     bot.send_message(user_id, text=text, reply_markup=keyboard)
+
+
+def update_token(message):
+    user_id = message.from_user.id
+    logger(user_id, message.text)
+    result = f'Ошбика!'
+    res, reason = postgreSQL.update_token(message.text)
+    if res:
+        result = reason
+    else:
+        result += reason
+    _, keyboard = get_keyboard(user_id, 'end')
+    bot.send_message(user_id, text=result, reply_markup=keyboard)
 
 
 if __name__ == '__main__':

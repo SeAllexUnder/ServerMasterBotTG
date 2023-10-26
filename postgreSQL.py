@@ -119,6 +119,20 @@ class read_SQL(PG_SQL):
         self._disconnect()
         return all_rows
 
+    def read_table(self, table):
+        all_rows = []
+        command = f"SELECT * FROM INFORMATION_SCHEMA.COLUMNS where TABLE_NAME='{table}'"
+        # print(command)
+        self._connect()
+        with self.connection.cursor() as cursor:
+            try:
+                cursor.execute(command)
+                all_rows = cursor.fetchall()
+            except Exception as _ex_read_rows:
+                print('Чтение строк - ', _ex_read_rows)
+        self._disconnect()
+        return all_rows
+
 
 class write_SQL(PG_SQL):
 
@@ -144,6 +158,7 @@ class write_SQL(PG_SQL):
         for i in range(count):
             rows_records = tuple([str(value[i]) for value in rows.values()])
             command = f'INSERT INTO {sc}{table}{col_s} VALUES {rows_records}'
+            print(command)
             self._connect()
             with self.connection.cursor() as cursor:
                 try:
@@ -154,18 +169,120 @@ class write_SQL(PG_SQL):
                     pass
             self._disconnect()
 
+    def append_row(self, schema, table, value):
+        command = f"INSERT INTO {schema}.{table} VALUES ('{value}')"
+        self._connect()
+        with self.connection.cursor() as cursor:
+            try:
+                cursor.execute(command)
+                self.connection.commit()
+                self._disconnect()
+                return True, 'Строка добавлена'
+            except Exception as _ex_append_rows:
+                return False, _ex_append_rows
+
+    def delete_row(self, schema, table, value, column):
+        command = f"DELETE FROM {schema}.{table} WHERE {column} = {value}"
+        self._connect()
+        with self.connection.cursor() as cursor:
+            try:
+                cursor.execute(command)
+                self.connection.commit()
+                self._disconnect()
+                return True, 'Строка удалена'
+            except Exception as _ex_append_rows:
+                return False, _ex_append_rows
+
+
+    def update_rows(self, schema, table, value, column):
+        command = f"UPDATE {schema}.{table} SET {column} = '{value}'"
+        self._connect()
+        with self.connection.cursor() as cursor:
+            try:
+                cursor.execute(command)
+                self.connection.commit()
+                self._disconnect()
+                return True, 'Строка обновлена'
+            except Exception as _ex_append_rows:
+                return False, _ex_append_rows
+
 
 def get_trusted_terminals():
     sql = PG_SQL()
     rows = sql.read.read_rows(table='confirmed_terminal_list', schema='public')
-    terminals = '\n'.join([row[0] for row in rows])
-    current_time = datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y %H:%M:%S')
+    terminals = '\n'.join([str(row[0]) for row in rows])
+    current_time = datetime.fromtimestamp(time.time()).strftime('%d-%m-%Y %H.%M.%S')
     filename = f'{current_time} trusted terminals.txt'
     with open(filename, 'w') as file:
         file.write(terminals)
     return filename
 
 
+def append_terminal(terminal):
+    sql = PG_SQL()
+    if check_terminal(terminal):
+        return False, f"Терминал {terminal} уже есть в БД"
+    else:
+        result, reason = sql.write.append_row(value=terminal, table='confirmed_terminal_list', schema='public')
+        if result:
+            return result, 'Терминал добавлен.'
+        else:
+            return result, reason
+
+
+def delete_terminal(terminal):
+    sql = PG_SQL()
+    if not check_terminal(terminal):
+        return False, f"Терминал {terminal} отсутствует в БД"
+    else:
+        result, reason = sql.write.delete_row(value=terminal, table='confirmed_terminal_list', schema='public', column='terminal')
+        if result:
+            return result, 'Терминал удален.'
+        else:
+            return result, reason
+
+
+def check_terminal(terminal):
+    sql = PG_SQL()
+    rows = sql.read.read_rows(table='confirmed_terminal_list', schema='public')
+    terminals = [str(row[0]) for row in rows]
+    if str(terminal) in terminals:
+        return True
+    else:
+        return False
+
+
+def check_token():
+    sql = PG_SQL()
+    rows = sql.read.read_rows(table='api_key', schema='public')
+    return rows[0][0], rows[0][1]
+
+
+def update_token(token):
+    sql = PG_SQL()
+    result, reason = sql.write.update_rows(value=token, table='api_key', schema='public',
+                                          column='api_key')
+    result, reason = sql.write.update_rows(value=True, table='api_key', schema='public',
+                                           column='status')
+    if result:
+        return result, 'Токен обновлен.'
+    else:
+        return result, reason
+
+
+
 if __name__ == '__main__':
     sql = PG_SQL()
-    print(sql.read.read_rows(table='refuelings', schema='refuelings'))
+    print(check_token())
+    # print(update_token('61ffc39253cc2d2fe46a33ae2a0286c70C3DF3011A9691F64E4A056FAEB65F3FED86A5E9'))
+    print(check_token())
+    # print(sql.read.read_rows(table='confirmed_terminal_list', schema='public'))
+    # print(sql.read.read_rows(table='refuelings', schema='refuelings'))
+    # print(check_terminal(123456789))
+    # append_terminal(326777889)
+    # print(delete_terminal(123456789))
+    # sql.write.append_row('public', 'confirmed_terminal_list', 326777888)
+    # append_terminal(123456780)
+    # print(check_terminal(123456789))
+    # get_trusted_terminals()
+    # print(sql.read.read_table(table='confirmed_terminal_list'))

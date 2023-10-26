@@ -1,5 +1,7 @@
 import psycopg2
 import json
+import time
+from datetime import datetime
 
 
 class PG_SQL:
@@ -151,6 +153,17 @@ class write_SQL(PG_SQL):
                 except Exception as _ex_append_rows:
                     pass
             self._disconnect()
+
+
+def get_trusted_terminals():
+    sql = PG_SQL()
+    rows = sql.read.read_rows(table='confirmed_terminal_list', schema='public')
+    terminals = '\n'.join([row[0] for row in rows])
+    current_time = datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y %H:%M:%S')
+    filename = f'{current_time} trusted terminals.txt'
+    with open(filename, 'w') as file:
+        file.write(terminals)
+    return filename
 
 
 if __name__ == '__main__':

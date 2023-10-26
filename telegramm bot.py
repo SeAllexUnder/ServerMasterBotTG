@@ -1,5 +1,10 @@
+import typing
 import telebot
 import json
+import time
+import postgreSQL
+import os
+from datetime import datetime
 from telebot import types
 from users import Users
 
@@ -9,12 +14,27 @@ with open("token bot.json", 'r', encoding='utf-8') as token_bot:
 bot = telebot.TeleBot(TOKEN)
 buffer_user_id = ''
 buffer_user_name = ''
+buttons = {
+        '1': 'Назад',
+        '2': 'Добавить терминал в доверенные',
+        '3': 'Удалить терминал из доверенных',
+        '4': 'Проверить наличие терминала в доверенных',
+        '5': 'Получить список доверенных терминалов',
+        '6': 'Проверить токен Виалона',
+        '7': 'Обновить токен Виалона',
+        '8': 'Работа с БД',
+        '9': 'Работа с токенами',
+        '10': 'Работа с пользователями',
+        '11': 'Добавить пользователя',
+        '12': 'Удалить пользователя',
+        '13': 'Получить список пользователей'
+    }
 
 
 @bot.message_handler(content_types=['text'])
 def start(message):
-    print(message)
     user_id = message.from_user.id
+    logger(user_id, message.text)
     users = Users()
     if not users.check_user_in_list(str(user_id)):
         text = "Вы не зарегистрированы. Пожалуйста, обратитесь к администратору."
@@ -26,9 +46,14 @@ def start(message):
 
 @bot.callback_query_handler(func=lambda call: True)
 def callback_worker(call):
+    print(call)
+    user_id = call.from_user.id
+    try:
+        logger(user_id, buttons[call.json["data"]])
+    except KeyError:
+        logger(user_id, call.json["data"])
     global buffer_user_id
     global buffer_user_name
-    user_id = call.from_user.id
     users = Users()
     if not users.check_user_in_list(str(user_id)):
         text = "Вы не зарегистрированы. Пожалуйста, обратитесь к администратору."
@@ -49,6 +74,11 @@ def callback_worker(call):
         text = "Введите номер терминала для проверки."
         bot.send_message(user_id, text=text)
         bot.register_next_step_handler(call.message, check_terminal)
+    # Кнопка "Получить список доверенных терминалов"
+    elif call.data == "5":
+        filename = postgreSQL.get_trusted_terminals()
+        with open(filename, 'rb') as file:
+            bot.send_document(call.message.chat.id, file)
     # Кнопка "Работа с БД"
     elif call.data == "8":
         text, keyboard = get_keyboard(user_id, 'Работа с БД')
@@ -90,6 +120,17 @@ def callback_worker(call):
         bot.send_message(user_id, text=text, reply_markup=keyboard)
 
 
+def logger(user_id, text):
+    users = Users()
+    users_json = users.get_users()
+    user_name = users_json[str(user_id)]["name"]
+    user_role = users_json[str(user_id)]["role"]
+    current_time = datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y %H:%M:%S')
+    with open(f'{user_id} {user_name} {user_role}.txt', 'a') as log:
+        log.write(current_time + ' - ' + text + '\n')
+    return ""
+
+
 def get_keyboard(user_id, menu):
     users = Users()
     role = users.get_role(user_id)
@@ -106,51 +147,41 @@ def get_keyboard(user_id, menu):
 
 
 def buttons_collection(role, menu):
-    buttons = {
-        1: 'Назад',
-        2: 'Добавить терминал в доверенные',
-        3: 'Удалить терминал из доверенных',
-        4: 'Проверить наличие терминала в доверенных',
-        5: 'Получить список доверенных терминалов',
-        6: 'Проверить токен Виалона',
-        7: 'Обновить токен Виалона',
-        8: 'Работа с БД',
-        9: 'Работа с токенами',
-        10: 'Работа с пользователями',
-        11: 'Добавить пользователя',
-        12: 'Удалить пользователя',
-        13: 'Получить список пользователей'
-    }
     buttons_list = []
     if role == 'admin':
         if menu == 'start':
-            buttons_list = [8, 9, 10]
+            buttons_list = ['8', '9', '10']
         elif menu == 'Работа с БД':
-            buttons_list = [2, 3, 4, 5, 1]
+            buttons_list = ['2', '3', '4', '5', '1']
         elif menu == 'Работа с токенами':
-            buttons_list = [6, 7, 1]
+            buttons_list = ['6', '7', '1']
         elif menu == 'end':
-            buttons_list = [1]
+            buttons_list = ['1']
         elif menu == 'Работа с пользователями':
-            buttons_list = [11, 12, 13, 1]
+            buttons_list = ['11', '12', '13', '1']
         elif menu == 'roles':
             users = Users()
             buttons_list = users.roles
             return [{'id': i, 'text': i} for i in buttons_list]
     if role == 'user':
         if menu == 'start':
-            buttons_list = [8, 9]
+            buttons_list = ['8', '9']
         elif menu == 'Работа с БД':
-            buttons_list = [2, 3, 4, 5, 1]
+            buttons_list = ['2', '3', '4', '5', '1']
         elif menu == 'Работа с токенами':
-            buttons_list = [6, 7, 1]
+            buttons_list = ['6', '7', '1']
         elif menu == 'end':
-            buttons_list = [1]
+            buttons_list = ['1']
     return [{'id': i, 'text': buttons[i]} for i in buttons if i in buttons_list]
+
+
+def check_terminal_in_bd(terminal):
+    return True
 
 
 def append_terminal(message):
     user_id = message.from_user.id
+    logger(user_id, message.text)
     result = f'Ошбика добавления!'
     try:
         terminal = int(message.text)
@@ -172,6 +203,7 @@ def append_terminal(message):
 
 def check_terminal(message):
     user_id = message.from_user.id
+    logger(user_id, message.text)
     result = f'Ошбика проверки!'
     try:
         terminal = int(message.text)
@@ -191,13 +223,10 @@ def check_terminal(message):
     bot.register_next_step_handler(message, check_terminal)
 
 
-def check_terminal_in_bd(terminal):
-    return True
-
-
 def delete_user(message):
     users = Users()
     user_id = message.from_user.id
+    logger(user_id, message.text)
     result = f'Ошбика!'
     try:
         id_ = int(message.text)
@@ -225,6 +254,7 @@ def get_user_id_and_continue(message):
     global buffer_user_id
     users = Users()
     user_id = message.from_user.id
+    logger(user_id, message.text)
     result = f'Ошбика!'
     try:
         id_ = int(message.text)
@@ -252,6 +282,7 @@ def get_user_id_and_continue(message):
 def get_user_name(message):
     global buffer_user_name
     user_id = message.from_user.id
+    logger(user_id, message.text)
     buffer_user_name = message.text
     text = "Выберите роль."
     _, keyboard = get_keyboard(user_id, 'roles')

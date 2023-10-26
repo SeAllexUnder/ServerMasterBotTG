@@ -9,13 +9,13 @@ class Users:
     exception_id = [6863515192]
 
     @staticmethod
-    def _get_users():
+    def get_users():
         with open("users_telegram.json", "r", encoding='utf-8') as users_json:
             users_ = json.load(users_json)
         return users_
 
     def get_role(self, user_id):
-        users_ = self._get_users()
+        users_ = self.get_users()
         try:
             role = users_[str(user_id)]['role']
             return role
@@ -24,7 +24,7 @@ class Users:
 
     def get_users_list(self):
         i = 1
-        users_ = self._get_users()
+        users_ = self.get_users()
         user_list = []
         for u in users_:
             user_list.append(f'{i}. {users_[u]["name"]}, ID: {u}, роль: {users_[u]["role"]}')
@@ -33,7 +33,7 @@ class Users:
         return users_string
 
     def check_user_in_list(self, id_):
-        users_ = self._get_users()
+        users_ = self.get_users()
         users_id_list = [str(u) for u in users_]
         if str(id_) in users_id_list:
             return True
@@ -48,7 +48,7 @@ class Users:
         if self.check_user_in_list(id_):
             return False, f"ID {id_} зарегистрирован ранее."
         else:
-            users_ = self._get_users()
+            users_ = self.get_users()
             user_info = {
                     "name": name,
                     "role": role
@@ -72,7 +72,7 @@ class Users:
         if not self.check_user_in_list(id_):
             return False, f"ID {id_} не зарегистрирован ранее."
         else:
-            users_ = self._get_users()
+            users_ = self.get_users()
             users_.pop(str(id_))
             with open("users_telegram.json", "w", encoding='utf-8') as roles_settings:
                 roles_settings.write(json.dumps(users_,
@@ -92,7 +92,7 @@ class Users:
         if not self.check_user_in_list(id_):
             return False, f"ID {id_} не зарегистрирован ранее."
         else:
-            users_ = self._get_users()
+            users_ = self.get_users()
             old_role = users_[str(id_)]['role']
             users_[str(id_)]['role'] = role
             with open("users_telegram.json", "w", encoding='utf-8') as roles_settings:

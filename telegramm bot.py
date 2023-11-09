@@ -142,8 +142,11 @@ def callback_worker(call):
 def logger(user_id, text):
     users = Users()
     users_json = users.get_users()
-    user_name = users_json[str(user_id)]["name"]
-    user_role = users_json[str(user_id)]["role"]
+    try:
+        user_name = users_json[str(user_id)]["name"]
+        user_role = users_json[str(user_id)]["role"]
+    except KeyError:
+        user_name, user_role = "не", "зарегистрирован"
     current_time = datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y %H:%M:%S')
     with open(f'{user_id} {user_name} {user_role}.txt', 'a') as log:
         log.write(current_time + ' - ' + text + '\n')
@@ -342,7 +345,15 @@ def update_token(message):
 
 
 if __name__ == '__main__':
-    bot.polling(none_stop=True, interval=0)
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=90)
+        except Exception as e:
+            current_time = datetime.fromtimestamp(time.time()).strftime('%d.%m.%Y %H:%M:%S')
+            with open(f'Баги.txt', 'a') as log:
+                log.write(current_time + '\n' + e + '\n')
+            time.sleep(5)
+            continue
     # print(buttons_collection('', ''))
     # print(check_role('123', ''))
     # print(buttons_collection('admin', 'start'))
